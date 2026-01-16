@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0a0a1a">
+    
+    <title>LuminPath 🎨✨ - AR Light Trails</title>
+    
+    <!-- A-Frame & AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
+    <!-- GPS Camera Extension -->
+    <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/gps-code/gps-camera-modified.js"></script>
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    
+    <!-- PWA meta tags -->
+    <meta name="description" content="Create and follow magical light trails in Augmented Reality">
+    <meta name="keywords" content="AR, Augmented Reality, Light Trails, Navigation, WebAR">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loader"></div>
+        <h2>LuminPath</h2>
+        <p>Loading magical AR experience...</p>
+        <p style="font-size: 13px; margin-top: 10px; opacity: 0.8;">
+            Grant camera & location permissions when prompted
+        </p>
+    </div>
+
+    <!-- AR Scene -->
+    <a-scene id="arScene" 
+             vr-mode-ui="enabled: false" 
+             embedded 
+             arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+             gps-camera 
+             rotation-reader>
+        
+        <!-- GPS Origin -->
+        <a-entity gps-entity-place="latitude: 0; longitude: 0"></a-entity>
+        
+        <!-- Trail Container (populated by JS) -->
+        <a-entity id="trailContainer"></a-entity>
+        
+        <!-- User Position Indicator -->
+        <a-entity id="userPosition" 
+                  geometry="primitive: sphere; radius: 0.4" 
+                  material="color: #3B82F6; opacity: 0.6; transparent: true"
+                  position="0 0 0" 
+                  scale="0.5 0.5 0.5">
+            <a-animation attribute="scale" 
+                        from="0.5 0.5 0.5" 
+                        to="0.7 0.7 0.7"
+                        dur="1500" 
+                        direction="alternate" 
+                        repeat="indefinite"
+                        easing="easeInOutSine"></a-animation>
+            <a-animation attribute="material.opacity" 
+                        from="0.3" 
+                        to="0.7"
+                        dur="2000" 
+                        direction="alternate" 
+                        repeat="indefinite"></a-animation>
+        </a-entity>
+        
+        <!-- Waypoint Cursor -->
+        <a-entity id="waypointCursor" 
+                  visible="false"
+                  geometry="primitive: ring; radiusInner: 0.25; radiusOuter: 0.35"
+                  material="color: #EC4899; shader: flat; transparent: true; opacity: 0.8"
+                  position="0 0 -4">
+            <a-animation attribute="rotation" 
+                        to="0 0 360" 
+                        dur="3000" 
+                        repeat="indefinite"
+                        easing="linear"></a-animation>
+            <a-animation attribute="scale" 
+                        from="1 1 1" 
+                        to="1.2 1.2 1.2"
+                        dur="1000" 
+                        direction="alternate" 
+                        repeat="indefinite"></a-animation>
+        </a-entity>
+        
+        <!-- Light -->
+        <a-light type="ambient" color="#445"></a-light>
+        <a-light type="directional" color="#fff" intensity="0.6" position="-1 2 1"></a-light>
+        
+    </a-scene>
+
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status">
+        <div class="connection-dot connected"></div>
+        <span>AR Ready</span>
+    </div>
+
+    <!-- UI Overlay -->
+    <div class="ui-overlay">
+        <div class="ui-container">
+            <!-- Mode Selector -->
+            <div class="mode-selector">
+                <button class="mode-btn active" id="paintModeBtn" onclick="switchMode('paint')">
+                    🎨 Paint
+                </button>
+                <button class="mode-btn" id="followModeBtn" onclick="switchMode('follow')">
+                    🧭 Follow
+                </button>
+                <button class="mode-btn" id="libraryModeBtn" onclick="switchMode('library')">
+                    📚 Library
+                </button>
+            </div>
+
+            <!-- Paint Mode Controls -->
+            <div id="paintControls" class="controls active">
+                <div class="control-group">
+                    <div class="control-label">Trail Color</div>
+                    <div class="color-picker">
+                        <div class="color-option selected" style="background: #10B981" onclick="selectColor('#10B981')" title="Emerald"></div>
+                        <div class="color-option" style="background: #3B82F6" onclick="selectColor('#3B82F6')" title="Blue"></div>
+                        <div class="color-option" style="background: #EC4899" onclick="selectColor('#EC4899')" title="Pink"></div>
+                        <div class="color-option" style="background: #F59E0B" onclick="selectColor('#F59E0B')" title="Amber"></div>
+                        <div class="color-option" style="background: #8B5CF6" onclick="selectColor('#8B5CF6')" title="Purple"></div>
+                        <div class="color-option" style="background: #06B6D4" onclick="selectColor('#06B6D4')" title="Cyan"></div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">Trail Style</div>
+                    <div class="trail-style">
+                        <button class="style-btn selected" onclick="selectStyle('particles')">✨ Glow</button>
+                        <button class="style-btn" onclick="selectStyle('line')">➰ Line</button>
+                        <button class="style-btn" onclick="selectStyle('sparks')">🎆 Sparks</button>
+                    </div>
+                </div>
+
+                <button class="action-btn paint-btn" id="startPaintBtn" onclick="togglePainting()">
+                    <span id="paintIcon">▶</span>
+                    <span id="paintText">Start Painting</span>
+                </button>
+                
+                <button class="action-btn save-btn" id="saveTrailBtn" onclick="saveTrail()" disabled>
+                    💾 Save Trail
+                </button>
+                
+                <button class="action-btn clear-btn" onclick="clearCurrentTrail()">
+                    🗑 Clear Trail
+                </button>
+            </div>
+
+            <!-- Follow Mode Controls -->
+            <div id="followControls" class="controls">
+                <div class="control-group">
+                    <div class="control-label">Select a Trail to Follow</div>
+                    <button class="style-btn" onclick="loadTrails()" style="width: 100%; margin-bottom: 12px;">
+                        🔄 Refresh Trails
+                    </button>
+                </div>
+                
+                <div id="trailList" class="trail-list"></div>
+                
+                <button class="action-btn save-btn" onclick="startFollowing()" id="followBtn" disabled>
+                    🚶‍♂️ Start Following
+                </button>
+                
+                <button class="action-btn clear-btn" onclick="stopFollowing()">
+                    ⏹ Stop Following
+                </button>
+            </div>
+
+            <!-- Library Mode Controls -->
+            <div id="libraryControls" class="controls">
+                <div class="control-group">
+                    <div class="control-label">Your Saved Trails</div>
+                    <button class="style-btn" onclick="loadAllTrails()" style="width: 100%; margin-bottom: 12px;">
+                        📥 Load All Trails
+                    </button>
+                </div>
+                
+                <div id="libraryList" class="trail-list"></div>
+                
+                <button class="action-btn clear-btn" onclick="clearAllVisuals()">
+                    🧹 Clear All Visuals
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div id="gpsIndicator" class="gps-indicator"></div>
+        <span id="statusText">Initializing GPS...</span>
+    </div>
+
+    <!-- AR Stats (Debug) -->
+    <div id="arStats" class="ar-stats">
+        <div>Points: <span id="pointCount">0</span></div>
+        <div>FPS: <span id="fpsCounter">60</span></div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+    
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .then(reg => console.log('Service Worker registered'))
+                .catch(err => console.log('SW registration failed:', err));
+        }
+        
+        // Hide loading screen when AR is ready
+        document.querySelector('a-scene').addEventListener('loaded', function() {
+            console.log('AR Scene loaded');
+            setTimeout(() => {
+                document.getElementById('loadingScreen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                }, 500);
+            }, 1500);
+        });
+        
+        // Handle errors
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error);
+            document.getElementById('statusText').textContent = 'Error: ' + e.message;
+        });
+    </script>
+</body>
+</html>
