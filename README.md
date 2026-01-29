@@ -61,4 +61,5 @@ Tap 🧭 Follow Mode
 Select a trail from list
 Tap 🚶‍♂️ Start Following
 Follow the glowing AR path
+
 AR cursor shows direction
